@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>N8VCL Ham Radio Software</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a dark radio-console shell. Fixed top bar with live Local/UTC clocks, hash-routed pages,
+   amber = Net Roster Logger, cyan = NTS Traffic Logger, monospace readouts for callsigns, times and frequencies. */
+:root{
+  --bg:#080c12;
+  --panel:#0f1620;
+  --panel-2:#141d2a;
+  --line:#1f2b3b;
+  --text:#d9e1ec;
+  --muted:#8a99ad;
+  --amber:#f3b23c;
+  --cyan:#4cc4ff;
+  --good:#5fd38d;
+  --warn:#ffcf5c;
+  --font-display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --font-body:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --radius:10px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 var(--font-body);
+  background-image:linear-gradient(rgba(76,196,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(76,196,255,.035) 1px,transparent 1px);
+  background-size:32px 32px;background-attachment:fixed}
+a{color:var(--cyan);text-underline-offset:3px}
+a:hover{color:#8fdcff}
+img{max-width:100%;display:block}
+h1,h2,h3,h4{font-family:var(--font-display);line-height:1.15;text-wrap:balance;margin:0;letter-spacing:.01em}
+h1{font-size:clamp(2.1rem,5vw,3.5rem);font-weight:700}
+h2{font-size:clamp(1.55rem,3vw,2.1rem);font-weight:600}
+h3{font-size:1.25rem;font-weight:600}
+h4{font-size:1.02rem;font-weight:600}
+p{margin:0}
+code,kbd,.mono{font-family:var(--font-mono);font-size:.9em}
+code{background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:.08em .38em;color:#e9eef5;word-break:break-word}
+kbd{background:var(--panel-2);border:1px solid var(--line);border-bottom-width:3px;border-radius:5px;padding:.05em .45em;color:var(--text)}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:3px;border-radius:4px}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:20;background:rgba(8,12,18,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:1200px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);font-family:var(--font-display);font-weight:700;font-size:1.15rem;letter-spacing:.04em}
+.brand .call{font-family:var(--font-mono);color:var(--amber);border:1px solid rgba(243,178,60,.45);border-radius:6px;padding:1px 8px;font-size:.95rem}
+.nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav a{color:var(--muted);text-decoration:none;font-weight:500;padding:6px 12px;border-radius:7px;font-size:.95rem}
+.nav a:hover{color:var(--text);background:var(--panel)}
+.nav a[aria-current="page"]{color:var(--text);background:var(--panel-2);box-shadow:inset 0 -2px 0 var(--cyan)}
+.clocks{margin-left:auto;display:flex;gap:16px;font-family:var(--font-mono);font-size:.85rem;color:var(--muted)}
+.clocks b{color:var(--text);font-weight:500}
+.clocks .z b{color:var(--cyan)}
+
+/* ---------- generic ---------- */
+.wrap{max-width:1200px;margin:0 auto;padding:0 20px}
+.page{display:none}
+.page.active{display:block}
+section.block{padding:64px 0;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:var(--font-mono);font-size:.78rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:12px;display:flex;gap:10px;align-items:center}
+.eyebrow::before{content:"";width:22px;height:2px;background:currentColor;opacity:.7}
+.amber{color:var(--amber)} .cyan{color:var(--cyan)}
+.lede{font-size:1.15rem;color:#bfcad8;max-width:62ch}
+.prose{max-width:70ch}
+.prose p+p,.prose p+ul,.prose ul+p,.prose ol+p,.prose p+ol{margin-top:.85em}
+.prose ul,.prose ol{padding-left:1.25em;margin:.5em 0 0}
+.prose li{margin:.3em 0}
+.btn{display:inline-flex;align-items:center;gap:8px;font-weight:600;text-decoration:none;padding:11px 18px;border-radius:8px;border:1px solid var(--line);color:var(--text);background:var(--panel-2);font-size:.97rem;cursor:pointer}
+.btn:hover{border-color:#34465e;color:#fff}
+.btn.amber{background:var(--amber);border-color:var(--amber);color:#1a1205}
+.btn.amber:hover{background:#ffc45a;color:#1a1205}
+.btn.cyan{background:var(--cyan);border-color:var(--cyan);color:#04131c}
+.btn.cyan:hover{background:#7dd5ff;color:#04131c}
+.btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.chip{font-family:var(--font-mono);font-size:.78rem;border:1px solid var(--line);background:var(--panel);color:#c6d1de;border-radius:999px;padding:3px 11px}
+.chip.v{border-color:currentColor}
+
+/* ---------- home hero ---------- */
+.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
+#waterfall{position:absolute;inset:0;width:100%;height:100%;opacity:.55}
+.hero::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--bg) 25%,rgba(8,12,18,.55) 70%,rgba(8,12,18,.2));pointer-events:none}
+.hero-in{position:relative;z-index:1;padding:76px 20px 70px;max-width:1200px;margin:0 auto}
+.hero h1 span{display:block}
+.hero .lede{margin-top:20px}
+.readout{display:inline-flex;gap:18px;flex-wrap:wrap;margin-top:28px;font-family:var(--font-mono);font-size:.82rem;color:var(--muted);border:1px solid var(--line);background:rgba(15,22,32,.8);border-radius:8px;padding:8px 14px}
+.readout b{color:var(--good);font-weight:500}
+
+.apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:22px;margin-top:34px}
+.app-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;position:relative}
+.app-card::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:var(--accent)}
+.app-card.rl{--accent:var(--amber)} .app-card.nt{--accent:var(--cyan)}
+.app-card .shot-top{aspect-ratio:16/9;overflow:hidden;border-bottom:1px solid var(--line);background:#05070c}
+.app-card .shot-top img{width:100%;height:100%;object-fit:cover;object-position:top left}
+.app-card .body{padding:24px 24px 26px;display:flex;flex-direction:column;gap:12px;flex:1}
+.app-card h3{font-size:1.5rem}
+.app-card h3 small{display:block;font-family:var(--font-mono);font-size:.78rem;color:var(--accent);font-weight:500;letter-spacing:.06em;margin-bottom:6px}
+.app-card ul{margin:0;padding-left:1.1em;color:#c3cddb}
+.app-card ul li{margin:.25em 0}
+.app-card .btn-row{margin-top:auto;padding-top:8px}
+
+.traits{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:16px;margin-top:30px}
+.trait{border:1px solid var(--line);border-radius:var(--radius);padding:18px 18px 20px;background:linear-gradient(180deg,var(--panel),rgba(15,22,32,.6))}
+.trait .k{font-family:var(--font-mono);font-size:.75rem;color:var(--good);letter-spacing:.08em;text-transform:uppercase}
+.trait h4{margin:6px 0 6px}
+.trait p{color:var(--muted);font-size:.95rem}
+
+/* ---------- program pages ---------- */
+.prog-hero{padding:56px 0 50px;border-bottom:1px solid var(--line)}
+.prog-hero .grid{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center}
+@media (max-width:900px){.prog-hero .grid{grid-template-columns:1fr}}
+.prog-hero .art{border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;margin-top:30px}
+.feature{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent,var(--cyan));border-radius:var(--radius);padding:18px 20px}
+.feature h4{margin-bottom:6px}
+.feature p{color:#b5c1d0;font-size:.95rem}
+.rl-scope{--accent:var(--amber)} .nt-scope{--accent:var(--cyan)}
+
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:0;margin-top:28px;border:1px solid var(--line);border-radius:12px;overflow:hidden;counter-reset:step}
+.flow div{padding:16px 16px 18px;background:var(--panel);border-right:1px solid var(--line);position:relative;counter-increment:step}
+.flow div:last-child{border-right:0}
+.flow div::before{content:counter(step,decimal-leading-zero);font-family:var(--font-mono);font-size:.75rem;color:var(--accent)}
+.flow b{display:block;font-family:var(--font-display);font-size:1.02rem;margin:4px 0 4px}
+.flow span{color:var(--muted);font-size:.88rem;line-height:1.45;display:block}
+
+.gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:18px;margin-top:28px}
+figure{margin:0}
+.shot{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#05070c}
+.shot img{width:100%;cursor:zoom-in}
+.shot figcaption{font-size:.88rem;color:var(--muted);padding:10px 14px;border-top:1px solid var(--line);background:var(--panel)}
+.shot figcaption b{color:var(--text);font-weight:600}
+.phone{max-width:300px}
+
+.dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px;margin-top:22px}
+.dl div{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.dl b{font-family:var(--font-display);font-size:1.02rem}
+.dl code{display:block;margin-top:6px;font-size:.78rem;background:transparent;border:0;padding:0;color:var(--muted)}
+
+/* ---------- docs ---------- */
+.docs-layout>*{min-width:0}
+.docs-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:44px;padding:40px 0 80px}
+@media (max-width:960px){.docs-layout{grid-template-columns:1fr}.toc{position:static!important;max-height:none!important}}
+.toc{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 100px);overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px 14px}
+.toc h4{font-family:var(--font-mono);font-size:.74rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:2px 6px 8px}
+.toc a{display:block;color:#b8c4d3;text-decoration:none;font-size:.92rem;padding:5px 8px;border-radius:6px;line-height:1.35}
+.toc a:hover{background:var(--panel-2);color:#fff}
+.toc a.sub{padding-left:20px;font-size:.86rem;color:var(--muted)}
+.toc .switch{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.doc h2{margin:56px 0 14px;padding-top:6px;display:flex;gap:12px;align-items:baseline}
+.doc h2 .n{font-family:var(--font-mono);font-size:.9rem;color:var(--accent)}
+.doc h2:first-of-type{margin-top:22px}
+.doc h3{margin:34px 0 10px}
+.doc .prose{max-width:76ch}
+.doc figure.shot{margin:22px 0 6px;max-width:900px}
+.doc .two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;max-width:900px}
+.doc .two figure.shot{margin:16px 0 0}
+.steps{list-style:none;padding:0;margin:18px 0 0;counter-reset:s;max-width:76ch}
+.steps>li{position:relative;padding:2px 0 18px 50px;counter-increment:s}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:32px;height:32px;border-radius:8px;border:1px solid var(--accent);color:var(--accent);font-family:var(--font-mono);font-weight:700;display:grid;place-items:center;font-size:.9rem}
+.steps>li::after{content:"";position:absolute;left:16px;top:38px;bottom:4px;width:1px;background:var(--line)}
+.steps>li:last-child::after{display:none}
+.steps b.t{display:block;font-family:var(--font-display);font-size:1.05rem;margin-bottom:2px}
+.callout{max-width:76ch;margin:20px 0;border:1px solid var(--line);border-left:3px solid var(--warn);background:rgba(255,207,92,.06);border-radius:8px;padding:12px 16px;font-size:.95rem}
+.callout.tip{border-left-color:var(--good);background:rgba(95,211,141,.06)}
+.callout b{color:#fff}
+.tbl{overflow-x:auto;max-width:76ch;margin:16px 0}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--font-mono);font-size:.74rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:500}
+pre{white-space:pre;max-width:100%;background:#05080d;border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;font:13px/1.55 var(--font-mono);color:#cfe3f2;max-width:76ch}
+.doc-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:20px;margin-top:30px}
+.doc-card{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:12px;padding:24px}
+.doc-card h3{margin-bottom:8px}
+.doc-card p{color:var(--muted)}
+.doc-card ol{margin:14px 0 18px;padding-left:1.2em;columns:2;column-gap:28px;font-size:.93rem}
+@media (max-width:520px){.doc-card ol{columns:1}}
+.doc-card ol a{color:#c8d3e0;text-decoration:none}
+.doc-card ol a:hover{color:var(--accent)}
+
+footer{padding:36px 0 46px;color:var(--muted);font-size:.9rem}
+footer .wrap{display:flex;gap:20px;flex-wrap:wrap;justify-content:space-between}
+footer .mono{color:var(--amber)}
+
+/* lightbox */
+#lb{position:fixed;inset:0;z-index:50;background:rgba(3,5,8,.92);display:none;align-items:center;justify-content:center;padding:24px;cursor:zoom-out}
+#lb.show{display:flex}
+#lb img{max-width:min(1500px,100%);max-height:100%;border-radius:8px;border:1px solid var(--line)}
+@media (max-width:640px){
+  .clocks{display:none}
+  .topbar-in{gap:10px}
+  section.block{padding:46px 0}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#home"><span class="call">N8VCL</span> Ham Radio Software</a>
+    <nav class="nav" aria-label="Main">
+      <a href="#home" data-nav="home">Home</a>
+      <a href="#net-roster-logger" data-nav="net-roster-logger">Net Roster Logger</a>
+      <a href="#nts-traffic-logger" data-nav="nts-traffic-logger">NTS Traffic Logger</a>
+      <a href="#docs" data-nav="docs">Docs</a>
+    </nav>
+    <div class="clocks" aria-label="Current time">
+      <span>LOCAL <b id="clkL">--:--:--</b></span>
+      <span class="z">UTC <b id="clkZ">--:--:--Z</b></span>
+    </div>
+  </div>
+</header>
+
+<main>
+<!-- =============================== HOME =============================== -->
+<div class="page" id="p-home">
+  <div class="hero">
+    <canvas id="waterfall" aria-hidden="true"></canvas>
+    <div class="hero-in">
+      <div class="eyebrow cyan">Software for net control and traffic handlers</div>
+      <h1><span>Run the net.</span><span class="amber">Move the traffic.</span></h1>
+      <p class="lede">Two free desktop apps by Scott, N8VCL, for amateur radio operators who run roll-call nets and pass National Traffic System radiograms. Both work without an internet connection, and your logs stay on your own computer.</p>
+      <div class="btn-row">
+        <a class="btn amber" href="#net-roster-logger">Net Roster Logger</a>
+        <a class="btn cyan" href="#nts-traffic-logger">NTS Traffic Logger</a>
+        <a class="btn" href="#docs">Read the manuals</a>
+      </div>
+      <div class="readout"><span>STATUS <b>QRV</b></span><span>WIN · LINUX · ANDROID</span><span>DATA: LOCAL</span><span>UPDATES: SIGNED</span></div>
+    </div>
+  </div>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">The two programs</div>
+      <h2>Pick the tool for the job at the mic</h2>
+      <p class="lede" style="margin-top:12px">Net Roster Logger is for the net control station. It runs the roll call, collects check-ins and builds the net report. NTS Traffic Logger is for the traffic handler. It sorts the radiograms you copy and records every relay and delivery.</p>
+      <div class="apps">
+        <article class="app-card rl">
+          <div class="shot-top"><img src="img/net_main.webp" alt="Net Roster Logger Main tab showing a roll-call station card and the Check-ins Today panel"></div>
+          <div class="body">
+            <h3><small>NET CONTROL · v1.49.3</small>N8VCL Net Roster Logger</h3>
+            <p style="color:#b9c4d2">Run a roster-based roll-call net from one screen. Check stations in with the space bar, log traffic, and see birthdays and anniversaries. Reports are ready for the net manager when you secure the net.</p>
+            <ul>
+              <li>Roll call card sorted by callsign suffix, with keyboard and touch shortcuts</li>
+              <li>Several nets in one app, each with its own roster and history</li>
+              <li>Traffic Net mode with NTS area and region groups, plus a traffic board</li>
+              <li>QRZ and FCC lookups, weather tiles, and sharing with a tablet</li>
+            </ul>
+            <div class="btn-row">
+              <a class="btn amber" href="#net-roster-logger">Explore</a>
+              <a class="btn" href="#docs-roster">User manual</a>
+            </div>
+          </div>
+        </article>
+        <article class="app-card nt">
+          <div class="shot-top"><img src="img/nts_dash.webp" alt="NTS Traffic Logger Dashboard with upcoming nets, counters and traffic waiting"></div>
+          <div class="body">
+            <h3><small>TRAFFIC HANDLING · v1.3.2</small>N8VCL NTS Traffic Logger</h3>
+            <p style="color:#b9c4d2">Paste in the messages you copied and the app sorts them into Deliver and Relay-by-state. It groups matching messages into books and logs every message you receive, originate, relay or deliver, with UTC times.</p>
+            <ul>
+              <li>Reads radiograms in any layout, even run together on one line or in book form</li>
+              <li>Flags check mismatches, split addresses and duplicates before you add them</li>
+              <li>One-click relays while you're on the air, with Undo</li>
+              <li>Reports counted like the ARRL Station Activity Report, with BPL progress</li>
+            </ul>
+            <div class="btn-row">
+              <a class="btn cyan" href="#nts-traffic-logger">Explore</a>
+              <a class="btn" href="#docs-nts">User manual</a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">What both apps share</div>
+      <h2>Built for the shack, not the cloud</h2>
+      <div class="traits">
+        <div class="trait"><div class="k">Offline first</div><h4>No internet needed</h4><p>Both apps run a whole net or traffic session with the network down. The internet is only used for optional lookups and update checks.</p></div>
+        <div class="trait"><div class="k">Your data</div><h4>Stored on your computer</h4><p>Rosters, logs and settings live in files in the app's own data folder. There's no account and no server copy.</p></div>
+        <div class="trait"><div class="k">Safety net</div><h4>Automatic snapshots</h4><p>Each app keeps a copy from before each day's changes for the last 7 active days. Any restore can be undone.</p></div>
+        <div class="trait"><div class="k">Updates</div><h4>One click, verified</h4><p>The app checks for a new version at startup and installs it for you, but only after checking the project's signing key.</p></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- =============================== NET ROSTER LOGGER =============================== -->
+<div class="page rl-scope" id="p-net-roster-logger">
+  <div class="prog-hero">
+    <div class="wrap grid">
+      <div>
+        <div class="eyebrow amber">Net control software</div>
+        <h1>N8VCL <span class="amber">Net Roster Logger</span></h1>
+        <p class="lede" style="margin-top:16px">A self-contained app for a net control station running a roll-call net. Track who checks in, log traffic (QTC), call out birthdays and anniversaries, and keep the roster current, all from one screen.</p>
+        <div class="chips"><span class="chip v amber">v1.49.3</span><span class="chip">Windows</span><span class="chip">Linux</span><span class="chip">Android</span><span class="chip">Free</span></div>
+        <div class="btn-row">
+          <a class="btn amber" href="https://github.com/scottws70/Net-Roster-Logger/releases">Download from GitHub Releases</a>
+          <a class="btn" href="#docs-roster">User manual</a>
+        </div>
+      </div>
+      <div class="art"><img src="img/net_splash.webp" alt="N8VCL Net Roster Logger splash art: a ham radio transceiver beside a paper net log at sunset"></div>
+    </div>
+  </div>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">How a net flows</div>
+      <h2>Work left to right across the tabs</h2>
+      <p class="lede" style="margin-top:12px">The tabs are laid out in the order a net runs. Read the preamble, call the occasions, take early and traffic check-ins, run the roster, then catch the late stations.</p>
+      <div class="flow">
+        <div><b>Preamble</b><span>Read your opening script, exactly as you saved it.</span></div>
+        <div><b>Birthdays</b><span>Today's birthdays and anniversaries, with "75th Birthday" counts.</span></div>
+        <div><b>Traffic</b><span>Log QTC by callsign, destination and quantity.</span></div>
+        <div><b>Early</b><span>Mobiles, portables and low-power stations first.</span></div>
+        <div><b>Main</b><span>The roll call. <kbd>Space</kbd> checks in and moves to the next station.</span></div>
+        <div><b>End of List</b><span>Late, missed or new stations.</span></div>
+        <div><b>Reports</b><span>Net report, monthly totals and stale stations.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">Features</div>
+      <h2>Everything net control needs at hand</h2>
+      <div class="features">
+        <div class="feature"><h4>Roll call in large type</h4><p>One station at a time, sorted by suffix, read the way you'd call it: <span class="mono">KD0ABE Henry Holyrood KS</span>. Stations already checked in are skipped automatically.</p></div>
+        <div class="feature"><h4>Keyboard and touch</h4><p><kbd>Space</kbd> checks in, <kbd>→</kbd> skips, <kbd>←</kbd> goes back. On a tablet: double-tap, swipe left and swipe right.</p></div>
+        <div class="feature"><h4>Find stations fast</h4><p>Type a full callsign, just the suffix, or part of a name or town. A station that isn't on the roster can be added and checked in at once.</p></div>
+        <div class="feature"><h4>Notes that stick</h4><p>"New grandson," "away until November." A station's note shows on its card at every net until you clear it.</p></div>
+        <div class="feature"><h4>QRZ and FCC lookups</h4><p>Photos, names, addresses and license class and expiration. A banner warns you when a station's license is about to expire.</p></div>
+        <div class="feature"><h4>Traffic Net mode</h4><p>A simpler screen for formal traffic, with NTS area and region groups, a net session timer (QNI, QTC, QTR) and a traffic board.</p></div>
+        <div class="feature"><h4>Reports to the net manager</h4><p>A monthly net report you can export as CSV or email to the net manager. The Net Manager's Summary combines every NCS's report.</p></div>
+        <div class="feature"><h4>Weather and ID timer</h4><p>Weather Underground or NWS tiles in the header, and a 10-minute ID timer that reminds you to identify.</p></div>
+        <div class="feature"><h4>Share with a tablet</h4><p>Run the same net from a phone, tablet or laptop on your network or over Tailscale, in a browser or the Android app.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">Screenshots</div>
+      <h2>A look around</h2>
+      <div class="gallery">
+        <figure class="shot"><img src="img/net_main.webp" alt="Main tab roll call card"><figcaption><b>Main.</b> The roll-call card, with the Check-ins Today panel on the right.</figcaption></figure>
+        <figure class="shot"><img src="img/net_early_suggest.webp" alt="Early check-ins with name suggestions"><figcaption><b>Early Check-ins.</b> Typing part of a name brings up matching stations.</figcaption></figure>
+        <figure class="shot"><img src="img/net_reportNet.webp" alt="Net Report for the month"><figcaption><b>Net Report.</b> One row per session, ready to export or email.</figcaption></figure>
+        <figure class="shot"><img src="img/net_trafficboard.webp" alt="Traffic Net traffic board"><figcaption><b>Traffic Board.</b> Traffic listed to each area and region, ticked off as it's sent.</figcaption></figure>
+        <figure class="shot"><img src="img/net_roster_cards.webp" alt="Roster cards in Net Setup"><figcaption><b>Roster.</b> Every station's details, with CSV import and export.</figcaption></figure>
+        <figure class="shot"><img src="img/net_bday.webp" alt="Birthdays and anniversaries today"><figcaption><b>Birthdays &amp; Anniversaries.</b> Today's occasions, with the years counted.</figcaption></figure>
+      </div>
+      <h3 style="margin-top:44px">Five color themes</h3>
+      <p class="prose" style="color:var(--muted);margin-top:6px">Default, High Visibility, Light, Blue and Terminal. Pick one in Settings → Display.</p>
+      <figure class="shot" style="margin-top:16px"><img src="img/net_themes.webp" alt="The Main tab in Default, High Visibility, Light, Blue and Terminal themes"><figcaption>From left: Default, High Visibility, Light, Blue, Terminal.</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">Download</div>
+      <h2>Get Net Roster Logger</h2>
+      <p class="lede" style="margin-top:12px">Every release is on GitHub. Download the package for your system, install it, and the app keeps itself up to date from then on.</p>
+      <div class="dl">
+        <div><b>Windows</b><code>…_x64-setup.exe · …_x64_en-US.msi</code></div>
+        <div><b>Linux</b><code>…_amd64.deb · ….x86_64.rpm · …_amd64.AppImage</code></div>
+        <div><b>Android</b><code>.apk · phones, tablets, Amazon Fire</code></div>
+      </div>
+      <div class="btn-row"><a class="btn amber" href="https://github.com/scottws70/Net-Roster-Logger/releases">Open GitHub Releases</a><a class="btn" href="#rl-install">Installation guide</a></div>
+    </div>
+  </section>
+</div>
+
+<!-- =============================== NTS TRAFFIC LOGGER =============================== -->
+<div class="page nt-scope" id="p-nts-traffic-logger">
+  <div class="prog-hero">
+    <div class="wrap grid">
+      <div>
+        <div class="eyebrow cyan">Traffic handling software</div>
+        <h1>N8VCL <span class="cyan">NTS Traffic Logger</span></h1>
+        <p class="lede" style="margin-top:16px">A desktop logbook for NTS traffic handlers. Paste in a jumbled list of radiograms and it sorts them by destination, gathers matching messages into books, and tracks every message from the moment you receive it until it's relayed or delivered.</p>
+        <div class="chips"><span class="chip v cyan">v1.3.2</span><span class="chip">Windows</span><span class="chip">Linux</span><span class="chip">MIT License</span><span class="chip">Free</span></div>
+        <div class="btn-row">
+          <a class="btn cyan" href="https://github.com/scottws70/NTSLogger/releases">Download from GitHub Releases</a>
+          <a class="btn" href="#docs-nts">User manual</a>
+        </div>
+      </div>
+      <div class="art"><img src="img/nts_preview.webp" alt="Sort and preview table showing messages grouped under Deliver and Relay with check warnings"></div>
+    </div>
+  </div>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">How traffic flows</div>
+      <h2>From the copy pad to the log</h2>
+      <div class="flow">
+        <div><b>Paste</b><span>Messages as you copied them: one field per line, all on one line, or in book form.</span></div>
+        <div><b>Sort &amp; preview</b><span>Grouped as Deliver or Relay by state. Problems are flagged before you save.</span></div>
+        <div><b>Waiting</b><span>Sorted by precedence, then ZIP. Matching messages are shown together as books.</span></div>
+        <div><b>Relay / Deliver</b><span>Records the station, net or method, and the UTC time.</span></div>
+        <div><b>Report</b><span>Counted like the ARRL Station Activity Report, with BPL progress.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">Features</div>
+      <h2>Less paperwork, fewer busted messages</h2>
+      <div class="features">
+        <div class="feature"><h4>Forgiving parser</h4><p>Upper or lower case, net chatter mixed in, <span class="mono">BOOK OF 3</span> with its own NR lines. It finds the messages and tells you which lines it skipped.</p></div>
+        <div class="feature"><h4>Check verification</h4><p>The word count is checked against the check, with <span class="mono">ARL</span> handled. The received check is kept, and the counted one is shown beside it.</p></div>
+        <div class="feature"><h4>Books built for you</h4><p>Messages with the same check, place of origin, text and signature become a book. <strong>Copy as book</strong> formats it, ready to read on the air.</p></div>
+        <div class="feature"><h4>Your delivery area</h4><p>List your ZIP codes, ZIP prefixes or cities. Traffic addressed there goes under Deliver, and everything else is grouped by state to relay.</p></div>
+        <div class="feature"><h4>On the air bar</h4><p>Enter the station taking traffic and every Relay button logs with one click. Undo stays available for about ten seconds.</p></div>
+        <div class="feature"><h4>Your nets on the dashboard</h4><p>Upcoming nets with local and UTC start times and a countdown. The net that's on now fills in automatically.</p></div>
+        <div class="feature"><h4>Originate in a form</h4><p>A single-radiogram form counts the check as you type and fills in your next message number and place of origin.</p></div>
+        <div class="feature"><h4>A full message log</h4><p>Search by callsign, name, city, net or a word in the text. Filter by status and date, and export to CSV.</p></div>
+        <div class="feature"><h4>Overdue alerts</h4><p>A tile counts messages that have waited longer than your limit (48 hours by default), so nothing gets stuck in the box.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">Screenshots</div>
+      <h2>A look around</h2>
+      <div class="gallery">
+        <figure class="shot"><img src="img/nts_dash.webp" alt="Dashboard"><figcaption><b>Dashboard.</b> Clocks, upcoming nets, counters and the traffic waiting.</figcaption></figure>
+        <figure class="shot"><img src="img/nts_waiting.webp" alt="Traffic Waiting grouped with a book"><figcaption><b>Traffic Waiting.</b> Deliver first, then Relay by state, with a book of 2.</figcaption></figure>
+        <figure class="shot"><img src="img/nts_onair.webp" alt="On the air bar with one-click relay buttons"><figcaption><b>On the air.</b> Every Relay button now sends to W0QED.</figcaption></figure>
+        <figure class="shot"><img src="img/nts_radiogram.webp" alt="Full radiogram view with history"><figcaption><b>Message view.</b> The whole radiogram, its check warning and its history.</figcaption></figure>
+        <figure class="shot"><img src="img/nts_reports.webp" alt="Traffic report"><figcaption><b>Reports.</b> Totals by net, by station, by method and by day.</figcaption></figure>
+        <figure class="shot"><img src="img/nts_log.webp" alt="Message log"><figcaption><b>Log.</b> Where every message came from and where it went.</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="wrap">
+      <div class="eyebrow">Download</div>
+      <h2>Get NTS Traffic Logger</h2>
+      <p class="lede" style="margin-top:12px">Releases are on GitHub. Version 1.3.0 and later update themselves. If you have 1.2.0 or earlier, install 1.3.0 or newer by hand once.</p>
+      <div class="dl">
+        <div><b>Windows</b><code>…_x64-setup.exe · …_x64_en-US.msi</code></div>
+        <div><b>Linux</b><code>…_amd64.deb · ….x86_64.rpm · …_amd64.AppImage</code></div>
+      </div>
+      <div class="btn-row"><a class="btn cyan" href="https://github.com/scottws70/NTSLogger/releases">Open GitHub Releases</a><a class="btn" href="#nt-install">Installation guide</a></div>
+    </div>
+  </section>
+</div>
+
+<!-- =============================== DOCS INDEX =============================== -->
+<div class="page" id="p-docs">
+  <section class="block" style="border-bottom:0">
+    <div class="wrap">
+      <div class="eyebrow">Documentation</div>
+      <h1>User manuals</h1>
+      <p class="lede" style="margin-top:14px">Illustrated, step-by-step guides to installing, setting up and using each program. The screenshots use made-up example stations, so the names and callsigns are for illustration only.</p>
+      <div class="doc-cards">
+        <div class="doc-card rl-scope">
+          <div class="eyebrow amber">Net control</div>
+          <h3>Net Roster Logger manual</h3>
+          <p>Covers v1.49.3 on Windows, Linux and Android.</p>
+          <ol>
+            <li><a href="#rl-install">Installation</a></li>
+            <li><a href="#rl-setup">First-time setup</a></li>
+            <li><a href="#rl-screen">The main screen</a></li>
+            <li><a href="#rl-running">Running a net</a></li>
+            <li><a href="#rl-roster">The roster</a></li>
+            <li><a href="#rl-reports">Reports</a></li>
+            <li><a href="#rl-traffic-net">Traffic Net mode</a></li>
+            <li><a href="#rl-settings">Settings</a></li>
+            <li><a href="#rl-sharing">Sharing with a tablet</a></li>
+            <li><a href="#rl-backup">Backups and safety</a></li>
+            <li><a href="#rl-trouble">Troubleshooting</a></li>
+          </ol>
+          <a class="btn amber" href="#docs-roster">Open the manual</a>
+        </div>
+        <div class="doc-card nt-scope">
+          <div class="eyebrow cyan">Traffic handling</div>
+          <h3>NTS Traffic Logger manual</h3>
+          <p>Covers v1.3.2 on Windows and Linux.</p>
+          <ol>
+            <li><a href="#nt-install">Installation</a></li>
+            <li><a href="#nt-setup">First-time setup</a></li>
+            <li><a href="#nt-enter">Entering traffic</a></li>
+            <li><a href="#nt-dashboard">The Dashboard</a></li>
+            <li><a href="#nt-relay">Relaying and delivering</a></li>
+            <li><a href="#nt-books">Books</a></li>
+            <li><a href="#nt-originate">Originating a message</a></li>
+            <li><a href="#nt-log">The Log</a></li>
+            <li><a href="#nt-reports">Reports</a></li>
+            <li><a href="#nt-backup">Backups and updates</a></li>
+          </ol>
+          <a class="btn cyan" href="#docs-nts">Open the manual</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- =============================== NET ROSTER LOGGER MANUAL =============================== -->
+<div class="page rl-scope" id="p-docs-roster">
+  <div class="wrap docs-layout">
+    <nav class="toc" aria-label="Manual contents">
+      <h4>Net Roster Logger</h4>
+      <a href="#rl-install">1 · Installation</a>
+      <a class="sub" href="#rl-windows">Windows</a>
+      <a class="sub" href="#rl-linux">Linux</a>
+      <a class="sub" href="#rl-android">Android</a>
+      <a class="sub" href="#rl-updates">Updates</a>
+      <a href="#rl-setup">2 · First-time setup</a>
+      <a href="#rl-screen">3 · The main screen</a>
+      <a href="#rl-running">4 · Running a net</a>
+      <a class="sub" href="#rl-main">Roll call (Main)</a>
+      <a class="sub" href="#rl-checkins">Early and late check-ins</a>
+      <a class="sub" href="#rl-notonroster">Stations not on the roster</a>
+      <a class="sub" href="#rl-traffic">Logging traffic</a>
+      <a href="#rl-roster">5 · The roster</a>
+      <a class="sub" href="#rl-lookups">QRZ and FCC lookups</a>
+      <a href="#rl-reports">6 · Reports</a>
+      <a href="#rl-traffic-net">7 · Traffic Net mode</a>
+      <a href="#rl-settings">8 · Settings</a>
+      <a href="#rl-sharing">9 · Sharing with a tablet</a>
+      <a href="#rl-backup">10 · Backups and safety</a>
+      <a href="#rl-trouble">11 · Troubleshooting</a>
+      <div class="switch"><a href="#docs-nts">→ NTS Traffic Logger manual</a></div>
+    </nav>
+    <article class="doc">
+      <div class="eyebrow amber">User manual · v1.49.3</div>
+      <h1>Net Roster Logger</h1>
+      <p class="lede" style="margin-top:14px">Net Roster Logger runs a roll-call net from one window. It tracks check-ins, logs traffic, flags birthdays and anniversaries, and keeps your roster current. It needs no internet connection during a net, and everything is stored on your computer.</p>
+
+      <h2 id="rl-install"><span class="n">01</span>Installation</h2>
+      <div class="prose"><p>All versions are published on the project's <a href="https://github.com/scottws70/Net-Roster-Logger/releases">GitHub Releases page</a>. Open the newest release, look under <b>Assets</b>, and download the file for your system.</p></div>
+      <div class="tbl"><table>
+        <thead><tr><th>System</th><th>File to download</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Windows</td><td><code>…_x64-setup.exe</code> or <code>…_x64_en-US.msi</code></td><td>Either works. The .exe is the simpler choice.</td></tr>
+          <tr><td>Debian, Ubuntu, Mint</td><td><code>…_amd64.deb</code></td><td>Installs like any other package.</td></tr>
+          <tr><td>Fedora, openSUSE</td><td><code>….x86_64.rpm</code></td><td>Installs like any other package.</td></tr>
+          <tr><td>Any Linux</td><td><code>…_amd64.AppImage</code></td><td>Nothing to install. Make it executable and run it.</td></tr>
+          <tr><td>Android, Fire tablet</td><td><code>.apk</code></td><td>Works on your main computer's nets through Sharing.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3 id="rl-windows">Windows</h3>
+      <ol class="steps">
+        <li><b class="t">Run the installer</b>Double-click the <code>setup.exe</code> (or <code>.msi</code>) you downloaded.</li>
+        <li><b class="t">Get past the SmartScreen warning</b>Windows says it protected your PC because the installer isn't signed with a paid Microsoft certificate. Click <b>More info</b>, then <b>Run anyway</b>. The app installs and works normally.</li>
+        <li><b class="t">Finish and launch</b>Follow the installer, then open <b>N8VCL Net Roster Logger</b> from the Start menu.</li>
+      </ol>
+      <div class="callout">The warning appears because signing an installer costs money each year. It doesn't mean anything is wrong with the file. Download only from the GitHub Releases page linked above.</div>
+
+      <h3 id="rl-linux">Linux</h3>
+      <ol class="steps">
+        <li><b class="t">.deb or .rpm</b>Open the file with your software installer, or install it from a terminal. You'll be asked for your password, as with any package install.
+<pre>sudo apt install "./N8VCL Net Roster Logger_1.49.3_amd64.deb"</pre></li>
+        <li><b class="t">AppImage</b>Make the file executable, then run it. In most file managers you can do this under Properties → Permissions, or from a terminal:
+<pre>chmod +x "N8VCL Net Roster Logger_1.49.3_amd64.AppImage"
+./"N8VCL Net Roster Logger_1.49.3_amd64.AppImage"</pre></li>
+      </ol>
+
+      <h3 id="rl-android">Android (phones, tablets, Amazon Fire)</h3>
+      <ol class="steps">
+        <li><b class="t">Download the .apk on the device</b>Open the Releases page in the device's browser and tap the <code>.apk</code>.</li>
+        <li><b class="t">Allow the install</b>Open the downloaded file. When Android asks, allow your browser or file app to install apps, then tap <b>Install</b>.</li>
+        <li><b class="t">Connect to your main computer</b>The Android app doesn't keep nets of its own. It opens on <b>Connect to Your Main Computer</b>. See <a href="#rl-sharing">Sharing with a tablet</a>.</li>
+      </ol>
+
+      <h3 id="rl-updates">Updates</h3>
+      <div class="prose"><p>From version 1.41.0 on, the app checks for a newer version each time it starts. When one is available, a bar at the top offers three buttons:</p>
+      <ul>
+        <li><b>Install Update</b> downloads the new version, installs it and restarts the app. The download is checked against the project's signing key first, so only genuine releases are accepted.</li>
+        <li><b>What's New</b> shows what changed in that version.</li>
+        <li><b>Later</b> puts it off until the next start.</li>
+      </ul>
+      <p>On Windows you'll see the installer's progress window. Linux .deb and .rpm installs ask for your password, and the AppImage updates itself in place. On Android, Android's own installer opens, so tap <b>Install</b> or <b>Update</b>. You can also check any time with <b>Check for Updates</b> in Settings. If you have 1.40.0 or earlier, install a newer version by hand once.</p></div>
+
+      <h2 id="rl-setup"><span class="n">02</span>First-time setup</h2>
+      <div class="prose"><p>Setup takes a few minutes and is done once. The roster, preamble and net details stay saved until you change them.</p></div>
+      <ol class="steps">
+        <li><b class="t">Open Net Setup</b>Click the <b>Net Setup</b> tab, between Reports and Settings. A new install starts with one net named "Net Name."</li>
+        <li><b class="t">Fill in Net Info</b>Enter the <b>Net Name</b> and your <b>NCS Callsign</b>. If you'll email monthly reports, also enter the <b>Net Manager</b> and <b>Net Mgr Email</b>.</li>
+        <li><b class="t">Type your preamble</b>Paste or type the opening script into <b>Preamble Script</b>. It will appear on the Preamble tab exactly as written.</li>
+        <li><b class="t">Build the roster</b>Under <b>Roster</b>, click <b>+ Add Station</b> for each station, or bring in a whole list with <b>Import Roster CSV</b>.</li>
+        <li><b class="t">Set your preferences</b>In <b>Settings</b>, choose a color theme, a 12- or 24-hour clock, and whether to show the ID timer. Optionally add weather, a QRZ login and email.</li>
+      </ol>
+      <div class="two">
+        <figure class="shot"><img src="img/net_first_setup.webp" alt="Net Setup on a new install"><figcaption><b>A new install.</b> Net Setup with the default "Net Name."</figcaption></figure>
+        <figure class="shot"><img src="img/net_netinfo.webp" alt="Net Info and Preamble Script fields filled in"><figcaption><b>Net Info filled in,</b> with the Preamble Script below it.</figcaption></figure>
+      </div>
+      <div class="callout tip"><b>Importing a roster:</b> the CSV can have its columns in any order, and the column names aren't case-sensitive. Recognized columns are Callsign, Name, Last Name, Spouse, City, Location, State, URL, Birthday, Anniversary, Last Check-in, Inactive, Area, Region, Phone, Email, Street, ZIP and Notes. Rows that match an existing callsign update that station.</div>
+
+      <h2 id="rl-screen"><span class="n">03</span>The main screen</h2>
+      <figure class="shot"><img src="img/net_main.webp" alt="The full Net Roster Logger window on the Main tab"><figcaption>The header, the tabs, the roll-call card, and the Check-ins Today panel on the right.</figcaption></figure>
+      <div class="prose" style="margin-top:16px">
+        <ul>
+          <li><b>Net Name</b> (top left) is a dropdown for switching between your nets.</li>
+          <li><b>Local Time</b> and <b>UTC Time</b> show the date and time, updated every second.</li>
+          <li><b>ID Timer</b> counts down from 10:00. When it reaches zero, a beep and a "Time to ID" pop-up remind you to identify and ask for waiting traffic. Click <b>OK</b> to start it again.</li>
+          <li><b>Weather tiles</b> (installed app only) show temperature, humidity, wind, pressure and more from the station you choose.</li>
+          <li><b>Check-ins Today</b> lists every station checked in today, with a count such as <span class="mono">5/16</span>. Click <b>✕</b> on an entry to undo a mistaken check-in. Drag the panel's left edge to resize it.</li>
+        </ul>
+        <p>On a small screen (a phone, tablet or narrow window), the header shrinks to one row and the tabs become a row you swipe sideways.</p>
+      </div>
+      <figure class="shot phone" style="margin-top:16px"><img src="img/net_mobile.webp" alt="Net Roster Logger on a phone-sized screen"><figcaption>The compact layout on a phone.</figcaption></figure>
+
+      <h2 id="rl-running"><span class="n">04</span>Running a net</h2>
+      <div class="prose"><p>The tabs run left to right in the order of a typical net. Click <b>Preamble</b> and read it, then <b>Birthdays &amp; Anniversaries</b> to call those out. Ask for traffic on the <b>Traffic</b> tab and for short-time stations on <b>Early Check-ins</b>. Run the roll call on <b>Main</b>, and catch everyone else on <b>End of the List</b>.</p></div>
+      <div class="two">
+        <figure class="shot"><img src="img/net_preamble.webp" alt="Preamble tab"><figcaption><b>Preamble.</b> Your script, read-only. Edit it in Net Setup.</figcaption></figure>
+        <figure class="shot"><img src="img/net_bday.webp" alt="Birthdays and anniversaries tab"><figcaption><b>Birthdays &amp; Anniversaries.</b> Shows "75th Birthday" when the year is known.</figcaption></figure>
+      </div>
+      <div class="callout tip">Birthdays and anniversaries can be a full date (<code>1984-03-22</code>) or just the month and day (<code>3/22</code>). A year by itself (<code>1984</code>) is kept on file but never matches a day.</div>
+
+      <h3 id="rl-main">Roll call (Main)</h3>
+      <div class="prose"><p>Main shows one station at a time, sorted by suffix, which is the letters after the number. For example, W1AW sorts under "AW". The top line reads the way you'd call the station: callsign, name, location and state.</p></div>
+      <div class="tbl"><table>
+        <thead><tr><th>Key</th><th>Touch</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Space</kbd></td><td>Double-tap</td><td>Check the station in and move to the next one</td></tr>
+          <tr><td><kbd>→</kbd></td><td>Swipe left</td><td>Skip to the next station without checking in</td></tr>
+          <tr><td><kbd>←</kbd></td><td>Swipe right</td><td>Go back one station, to catch a missed or misheard call</td></tr>
+        </tbody>
+      </table></div>
+      <div class="prose">
+        <p>Stations already checked in today are skipped. Each new day the roll call starts again from the top of the roster.</p>
+        <p><b>Notes</b> stay with the station and show at every net until you change them. Click into the Notes box to type, then click outside it before using <kbd>Space</kbd> or the arrows again. <b>Inactive</b> hides a station from the roll call. The station comes back by itself the next time it checks in from any tab.</p>
+        <p>When you reach the end of the roster, the app switches to <b>End of the List</b> automatically.</p>
+      </div>
+      <div class="callout">A station whose license expires within 10 days gets a yellow banner above its callsign, and an expired license gets a red one. This needs a QRZ or FCC lookup on file. See <a href="#rl-lookups">lookups</a>.</div>
+
+      <h3 id="rl-checkins">Early and late check-ins</h3>
+      <div class="prose">
+        <p><b>Early Check-ins</b>, <b>End of the List</b> and the <b>Out of Sequence, Early, or Late</b> box under the Main card all work the same way. Type a <b>Callsign</b> and press <kbd>Enter</kbd>.</p>
+        <ul>
+          <li>A suffix alone (<code>AW</code>) is enough if only one station on the roster has it.</li>
+          <li>Don't have the callsign? Type part of a <b>Name</b> or a <b>City / Location</b>. Matching stations drop down, and those already checked in today are marked <b>✓ checked in</b>. Click one, or use <kbd>↓</kbd> <kbd>↑</kbd> and <kbd>Enter</kbd>.</li>
+          <li>Anyone checked in this way is skipped when the roll call reaches them.</li>
+        </ul>
+      </div>
+      <figure class="shot"><img src="img/net_early_suggest.webp" alt="Typing 'mar' in the Name field shows KC0CVN Marcy Lund"><figcaption>Typing <code>mar</code> in Name finds Marcy, KC0CVN, from N of McCook.</figcaption></figure>
+
+      <h3 id="rl-notonroster">Stations not on the roster</h3>
+      <div class="prose"><p>An unknown callsign opens the <b>Not on the Roster</b> prompt. With a QRZ login saved, the station's name and city are looked up while the prompt is open. If QRZ doesn't know the call, that's a good hint you've made a typo.</p>
+        <ul>
+          <li><b>Add to roster and check in</b> (the default, <kbd>Enter</kbd>) adds the station with its looked-up details.</li>
+          <li><b>Just check in for now</b> logs it today without adding it to the roster.</li>
+          <li><b>Re-Enter Callsign</b> (or <kbd>Esc</kbd>) lets you fix the callsign.</li>
+        </ul></div>
+      <figure class="shot"><img src="img/net_notonroster.webp" alt="Not on the Roster prompt"><figcaption>The Not on the Roster prompt.</figcaption></figure>
+
+      <h3 id="rl-traffic">Logging traffic</h3>
+      <div class="prose"><p>On the <b>Traffic</b> tab, fill in a row: Callsign, Destination, Qty and Sent?. Then press <kbd>Enter</kbd> or <kbd>Tab</kbd> to start a new row. Setting <b>Sent?</b> to Yes adds to today's QTC count, and setting it back takes it away again.</p></div>
+      <figure class="shot"><img src="img/net_traffic.webp" alt="Traffic tab with a row filled in"><figcaption>A traffic row for Kansas City, MO, marked sent.</figcaption></figure>
+
+      <h2 id="rl-roster"><span class="n">05</span>The roster</h2>
+      <div class="prose">
+        <p>The roster is at the bottom of <b>Net Setup</b>. Each net has its own. Every station is a card with its callsign, names, city, location, state, dates, a <b>QRZ Page</b> link, an Inactive checkbox, Area, Region, contact details and Notes. The counts at the top read like <span class="mono">| Active: 38 | Inactive: 4 | Total: 42 |</span>.</p>
+        <p><b>Location</b> is how the net refers to a station, such as "East Campus, Lincoln" or "N of McCook." It's what the Main card shows, and lookups never change it. Callsigns are converted to uppercase as you type, and a slashed zero (<code>Ø</code>) becomes a real <code>0</code>.</p>
+        <p><b>Export Roster CSV</b> saves the roster in the same format Import accepts.</p>
+      </div>
+      <figure class="shot"><img src="img/net_roster_cards.webp" alt="Roster station cards"><figcaption>Roster cards, with <b>+ Add Station</b> at the bottom.</figcaption></figure>
+
+      <h3 id="rl-lookups">QRZ and FCC lookups</h3>
+      <div class="prose"><ul>
+        <li>With a <b>QRZ login</b> saved, lookups go to QRZ.com. Photos need an active QRZ XML Logbook Data subscription.</li>
+        <li>Without one, or for a callsign QRZ doesn't know, US calls are looked up in the <b>FCC license database</b> through callook.info or HamDB.org. These lookups return the name, address, license class and expiration, but no photo or email.</li>
+        <li><b>Look Up</b> on a card looks up one station. <b>Fetch Missing</b> works through every station that hasn't been looked up, pausing between each one. Names and email you've typed are never overwritten.</li>
+        <li>New stations added from a check-in prompt are looked up automatically. Photos are saved on the computer, so they still show during a net with no internet.</li>
+      </ul></div>
+
+      <h2 id="rl-reports"><span class="n">06</span>Reports</h2>
+      <div class="prose"><ul>
+        <li><b>Today</b>: today's check-ins and QTC.</li>
+        <li><b>This Month</b>: total check-ins, QTC and net sessions this month.</li>
+        <li><b>Net Report</b>: one row per session for a chosen month, with a totals row. Filter by weekday with <b>Days</b>. <b>Export CSV</b> saves it, and <b>Send to Net Mgr</b> emails it (this needs <a href="#rl-settings">Email</a> set up first).</li>
+        <li><b>Net Manager's Summary</b>: combines every NCS's exported Net Report into one monthly summary with Sessions, QNI, QTC and AVG.</li>
+        <li><b>Stale Check-ins (&gt;30 days)</b>: stations that haven't checked in for a month. Remove them, or use <b>Mark All Listed Inactive</b> to hide them until they're heard again.</li>
+      </ul></div>
+      <div class="two">
+        <figure class="shot"><img src="img/net_reportToday.webp" alt="Today report"><figcaption><b>Today.</b></figcaption></figure>
+        <figure class="shot"><img src="img/net_reportNet.webp" alt="Net report"><figcaption><b>Net Report</b> for the month.</figcaption></figure>
+      </div>
+      <figure class="shot"><img src="img/net_reportStale30.webp" alt="Stale check-ins report"><figcaption><b>Stale Check-ins</b>, most overdue first.</figcaption></figure>
+
+      <h2 id="rl-traffic-net"><span class="n">07</span>Traffic Net mode</h2>
+      <div class="prose">
+        <p>For nets whose purpose is passing formal traffic rather than calling a roster. In <b>Net Setup → Net Type</b>, choose <b>Traffic Net</b>. The setting applies to that net only, and switching back loses nothing.</p>
+        <ul>
+          <li>Only Preamble, Main, Reports, Net Setup and Settings are shown. <b>Main</b> becomes a check-in form with traffic fields.</li>
+          <li>The <b>Net Session</b> box records <b>Start Net</b> and <b>Secure Net</b> times and keeps a running count of QNI, QTC and QTR.</li>
+          <li><b>Traffic Groups</b> sort stations into areas, regions or states. <b>Use NTS Central Area preset</b> adds EAN, R5, R9, R10 and WAN in one click. The most specific match wins: State, then Region, then Area.</li>
+          <li>The <b>Traffic Board</b> shows the traffic listed to each group. Tick <b>Sent</b> once traffic is passed. Only sent traffic counts as QTC.</li>
+          <li><b>Reports → Today</b> adds a one-line net report, ready to copy and send.</li>
+        </ul>
+      </div>
+      <figure class="shot"><img src="img/net_groups.webp" alt="Traffic Groups with the Central Area preset"><figcaption>Traffic Groups after <b>Use NTS Central Area preset</b>.</figcaption></figure>
+      <div class="two">
+        <figure class="shot"><img src="img/net_trafficnet.webp" alt="Traffic Net main screen"><figcaption><b>Main</b> on a Traffic Net, with the Net Session box.</figcaption></figure>
+        <figure class="shot"><img src="img/net_trafficboard.webp" alt="Traffic Board"><figcaption>The <b>Traffic Board</b> and its totals.</figcaption></figure>
+      </div>
+      <figure class="shot"><img src="img/net_trafficreport.webp" alt="Net report line for a traffic net"><figcaption>The one-line report: <code>&lt;Net&gt; net report for &lt;date&gt; utc &lt;QNI&gt; &lt;QTC&gt; &lt;calls…&gt; &lt;NCS&gt;/NCS</code></figcaption></figure>
+
+      <h2 id="rl-settings"><span class="n">08</span>Settings</h2>
+      <div class="prose"><ul>
+        <li><b>Display</b>: color theme (Default, High Visibility, Light, Blue, Terminal), 12- or 24-hour local time, and the 10-minute ID timer.</li>
+        <li><b>Weather</b>: choose a Weather Underground station (needs your WU API key) or a National Weather Service station such as <code>KLNK</code> or <code>KOMA</code>. Pick which tiles to show, and click <b>Test</b>.</li>
+        <li><b>File Locations</b>: default folders for Backups and Roster exports.</li>
+        <li><b>QRZ.com Login</b>: <b>Save</b>, then <b>Test Login</b> to confirm the XML subscription. The login is stored only on this computer and is never included in backups.</li>
+        <li><b>Email</b>: pick Gmail, Yahoo, iCloud or Other, and enter your address and an <b>app password</b>. These services don't accept your normal password from apps. For Gmail, go to Google Account → Security → 2-Step Verification → App passwords.</li>
+      </ul></div>
+      <div class="two">
+        <figure class="shot"><img src="img/net_set_wxSource.webp" alt="Display and Weather settings"><figcaption><b>Weather</b> settings.</figcaption></figure>
+        <figure class="shot"><img src="img/net_set_qrzUser.webp" alt="QRZ.com login settings"><figcaption><b>QRZ.com Login</b> and <b>Email</b>.</figcaption></figure>
+      </div>
+      <figure class="shot"><img src="img/net_themes.webp" alt="All five color themes"><figcaption>The five themes: Default, High Visibility, Light, Blue, Terminal.</figcaption></figure>
+
+      <h2 id="rl-sharing"><span class="n">09</span>Sharing with a tablet</h2>
+      <div class="prose"><p>Use your main computer's nets from a tablet, phone or laptop on the same network, or from anywhere over Tailscale. Changes show on every device within a couple of seconds, so you can switch devices partway through a net.</p></div>
+      <ol class="steps">
+        <li><b class="t">Turn on sharing</b>On the main computer, go to <b>Settings → Sharing</b> and tick <b>Share this computer's nets</b>. Note the address shown (for example <code>http://192.168.1.20:7373</code>) and the 6-digit <b>pairing code</b>. On Windows, allow the app through the firewall for Private networks.</li>
+        <li><b class="t">Connect the other device</b>Open the address in any web browser, or enter it on the Android app's <b>Connect to Your Main Computer</b> screen. A desktop app can connect from its own Settings → Sharing.</li>
+        <li><b class="t">Enter the pairing code once</b>After that, the device goes straight in. Keep the app open on the main computer while others are connected.</li>
+      </ol>
+      <figure class="shot"><img src="img/net_set_shareEnabled.webp" alt="Email and Sharing settings"><figcaption><b>Sharing</b> settings, below Email.</figcaption></figure>
+      <div class="callout"><b>New Code</b> makes a new pairing code, and every device will need to enter it again. Use it if someone you don't want on your nets has the code. After five wrong codes in a minute, that device is locked out for 5 minutes.</div>
+
+      <h2 id="rl-backup"><span class="n">10</span>Backups and safety</h2>
+      <div class="prose">
+        <p>Everything is stored locally, with no cloud copy. Your data is yours, and keeping it safe is up to you.</p>
+        <ul>
+          <li><b>Backup This Net</b> (Reports tab) saves a dated JSON file named like <code>[Net Name]-Backup-[date].json</code>. <b>Restore This Net</b> loads one back in. Back up each net separately.</li>
+          <li><b>Automatic Snapshots</b>: the installed app keeps a copy of each net from before each day's changes, for the last 7 days that net changed. A restore can be undone with <b>Before the last restore</b>.</li>
+          <li><b>Open Data Folder</b> shows where your nets are kept. To move to a new computer, copy that folder.</li>
+          <li>A red bar across the top means changes aren't being saved. Make a backup right away.</li>
+        </ul>
+      </div>
+      <div class="callout tip"><b>Back up at least once a week, and right after every net.</b> To have someone substitute for you, send them your backup file to restore. If they only need the current roster, send an Export Roster CSV instead.</div>
+
+      <h2 id="rl-trouble"><span class="n">11</span>Troubleshooting</h2>
+      <div class="tbl"><table>
+        <thead><tr><th>Problem</th><th>What to check</th></tr></thead>
+        <tbody>
+          <tr><td>A station doesn't come up on Main</td><td>It may be marked Inactive in the roster, or it may have already checked in early today.</td></tr>
+          <tr><td>"Matches multiple callsigns"</td><td>The suffix fits more than one station. Type the full callsign.</td></tr>
+          <tr><td>A station shows as Unassigned on the Traffic Board</td><td>Its Area or Region doesn't match any Traffic Group. Fill it in on the roster, or check the group's "Matches roster" value.</td></tr>
+          <tr><td>Some tabs are missing</td><td>The net is set to Traffic Net. See Net Setup → Net Type.</td></tr>
+          <tr><td>An imported birthday never matches</td><td>A year by itself (<code>1984</code>) is stored as year-only on purpose. Use a full date or month/day.</td></tr>
+          <tr><td>Windows blocks the installer</td><td>Click <b>More info</b>, then <b>Run anyway</b>. See <a href="#rl-windows">Windows</a>.</td></tr>
+        </tbody>
+      </table></div>
+    </article>
+  </div>
+</div>
+
+<!-- =============================== NTS MANUAL =============================== -->
+<div class="page nt-scope" id="p-docs-nts">
+  <div class="wrap docs-layout">
+    <nav class="toc" aria-label="Manual contents">
+      <h4>NTS Traffic Logger</h4>
+      <a href="#nt-install">1 · Installation</a>
+      <a href="#nt-setup">2 · First-time setup</a>
+      <a class="sub" href="#nt-station">My Station</a>
+      <a class="sub" href="#nt-area">My Delivery Area</a>
+      <a class="sub" href="#nt-nets">My Nets</a>
+      <a href="#nt-enter">3 · Entering traffic</a>
+      <a class="sub" href="#nt-paste">Paste a list</a>
+      <a class="sub" href="#nt-preview">Sort &amp; preview</a>
+      <a href="#nt-dashboard">4 · The Dashboard</a>
+      <a href="#nt-relay">5 · Relaying and delivering</a>
+      <a class="sub" href="#nt-onair">One-click relays</a>
+      <a href="#nt-books">6 · Books</a>
+      <a href="#nt-originate">7 · Originating a message</a>
+      <a href="#nt-log">8 · The Log</a>
+      <a href="#nt-reports">9 · Reports</a>
+      <a href="#nt-backup">10 · Backups and updates</a>
+      <div class="switch"><a href="#docs-roster">→ Net Roster Logger manual</a></div>
+    </nav>
+    <article class="doc">
+      <div class="eyebrow cyan">User manual · v1.3.2</div>
+      <h1>NTS Traffic Logger</h1>
+      <p class="lede" style="margin-top:14px">A desktop logbook for NTS traffic handlers. It sorts the radiograms you copy by destination, gathers matching messages into books, and keeps track of every message you receive, originate, relay and deliver. It records who each message came from and went to, on what net, and when (UTC). Everything is stored on your own computer.</p>
+
+      <h2 id="nt-install"><span class="n">01</span>Installation</h2>
+      <div class="prose"><p>Download the newest release from the project's <a href="https://github.com/scottws70/NTSLogger/releases">GitHub Releases page</a>. Under <b>Assets</b>, pick the file for your system.</p></div>
+      <div class="tbl"><table>
+        <thead><tr><th>System</th><th>File to download</th></tr></thead>
+        <tbody>
+          <tr><td>Windows</td><td><code>…_x64-setup.exe</code> or <code>…_x64_en-US.msi</code></td></tr>
+          <tr><td>Debian, Ubuntu, Mint</td><td><code>…_amd64.deb</code></td></tr>
+          <tr><td>Fedora, openSUSE</td><td><code>….x86_64.rpm</code></td></tr>
+          <tr><td>Any Linux</td><td><code>…_amd64.AppImage</code> (make it executable and run it)</td></tr>
+        </tbody>
+      </table></div>
+      <ol class="steps">
+        <li><b class="t">Windows</b>Run the installer. If SmartScreen says it protected your PC, click <b>More info</b>, then <b>Run anyway</b>. The installer isn't signed with a paid certificate, but the app works normally.</li>
+        <li><b class="t">Linux</b>Install the .deb or .rpm with your software installer, or run the AppImage:
+<pre>chmod +x "N8VCL NTS Traffic Logger_1.3.2_amd64.AppImage"
+./"N8VCL NTS Traffic Logger_1.3.2_amd64.AppImage"</pre></li>
+        <li><b class="t">Open the app</b>It opens on the <b>Dashboard</b>. It's empty until you set up your station.</li>
+      </ol>
+      <figure class="shot"><img src="img/nts_dash_empty.webp" alt="The Dashboard before any traffic is entered"><figcaption>The Dashboard with your nets set up and no traffic yet.</figcaption></figure>
+
+      <h2 id="nt-setup"><span class="n">02</span>First-time setup</h2>
+      <div class="prose"><p>Open the <b>Settings</b> tab. There are three things to fill in before you enter any traffic.</p></div>
+      <h3 id="nt-station">My Station</h3>
+      <div class="prose"><p>Enter your <b>callsign</b>, <b>name</b>, and <b>city</b> and <b>state</b>, which are used as the place of origin. Also set the <b>Next message number</b>. Each message you originate takes that number, and it goes up by one each time.</p></div>
+      <h3 id="nt-area">My Delivery Area</h3>
+      <div class="prose"><p>List the <b>ZIP codes</b> or ZIP prefixes you deliver to (<code>680, 681, 685</code>) and/or the <b>cities</b> (<code>OMAHA NE, LINCOLN NE</code>). Traffic addressed inside this area is sorted under <b>Deliver</b>. Everything else goes under <b>Relay</b>, grouped by state. To override the sorting for a single message, edit it and use <b>Sort under</b>.</p></div>
+      <figure class="shot"><img src="img/nts_settings1.webp" alt="My Station and My Delivery Area settings"><figcaption>My Station and My Delivery Area.</figcaption></figure>
+      <h3 id="nt-nets">My Nets</h3>
+      <div class="prose"><p>Click <b>+ Add net</b> for each net you check into. Enter its name, days of the week, start time (local or UTC), length, frequency or mode, and a note such as "Liaison to TEN." These nets fill the Dashboard's <b>Upcoming Nets</b> and the Net choices when you log traffic.</p></div>
+      <figure class="shot"><img src="img/nts_settings_nets.webp" alt="My Nets table"><figcaption>My Nets, with both local and UTC start times.</figcaption></figure>
+      <div class="callout tip">Under <b>Preferences</b>, choose the theme (match system, light or dark), whether "today" and reports use <b>local days or UTC days</b>, the overdue limit in hours, and a 12- or 24-hour clock.</div>
+
+      <h2 id="nt-enter"><span class="n">03</span>Entering traffic</h2>
+      <h3 id="nt-paste">Paste a list of messages</h3>
+      <div class="prose">
+        <p>Go to <b>Enter Traffic</b> and paste any number of radiograms into the box. They can be:</p>
+        <ul>
+          <li>one field per line, the standard way;</li>
+          <li>run together on one line, such as <code>NR 57 P W5RTA 11 TULSA OK 2210Z NOV 18 GARY HOLT … BT … BT ELLEN AR</code>;</li>
+          <li>already in book form, starting with <code>BOOK OF 3 …</code> followed by the text and <code>NR 101</code>, <code>NR 102</code> with their addresses;</li>
+          <li>any mix of these, in upper or lower case, with net chatter or headers in between.</li>
+        </ul>
+        <p>Fill in <b>Received from</b>, <b>Net</b> and the <b>UTC date/time</b>, or choose <b>I originated these</b>. Then click <b>Sort &amp; preview</b>.</p>
+      </div>
+      <figure class="shot"><img src="img/nts_paste.webp" alt="Paste traffic box with messages pasted and received-from details"><figcaption>Messages pasted in, received from KC0ABC on the Late Night Traffic Net.</figcaption></figure>
+
+      <h3 id="nt-preview">Sort &amp; preview</h3>
+      <div class="prose">
+        <p>The preview shows each message under its Deliver or Relay group, with its book letter. It flags anything worth checking:</p>
+        <ul>
+          <li>a <b>check</b> that doesn't match the number of words in the text (the check is kept as received, and the counted value is shown next to it);</li>
+          <li>an address that came in on one line and was split automatically;</li>
+          <li>a message with only one <code>BT</code>, or none;</li>
+          <li>a message that's already in your log, which is unticked so it won't be added twice;</li>
+          <li>lines that weren't part of any message.</li>
+        </ul>
+        <p>Click a row to correct it, untick anything you don't want, then click <b>Add <i>n</i> to Waiting</b>.</p>
+      </div>
+      <figure class="shot"><img src="img/nts_preview.webp" alt="Preview table with a check mismatch and an automatically split address flagged on NR 57"><figcaption>NR 57 is flagged twice: its address was split automatically, and its check of 11 doesn't match the 12 words counted.</figcaption></figure>
+
+      <h2 id="nt-dashboard"><span class="n">04</span>The Dashboard</h2>
+      <figure class="shot"><img src="img/nts_dash.webp" alt="Dashboard with clocks, upcoming nets, tiles and traffic waiting"><figcaption>The Dashboard after adding six messages.</figcaption></figure>
+      <div class="prose" style="margin-top:16px"><ul>
+        <li><b>Clocks</b>: today's date, with local time and UTC.</li>
+        <li><b>Upcoming Nets</b> for the next week, with local and UTC times and a countdown ("in 7h 21m", "On now").</li>
+        <li><b>Tiles</b>: messages waiting to relay or deliver, Priority/Emergency waiting, messages waiting past your overdue limit, and today's received, relayed, delivered and originated counts.</li>
+        <li><b>Traffic Waiting</b>: every open message, grouped as <b>Deliver — my area</b>, then <b>Relay — OH</b>, <b>Relay — PA</b> and so on. Within each group, messages are sorted by precedence (Emergency, Priority, Welfare, Routine), then ZIP.</li>
+      </ul>
+      <p>Click any row to see the whole radiogram and its history. From there you can <b>Copy</b>, <b>Edit</b> or <b>Delete</b> it, or mark it <b>Undeliverable</b>.</p></div>
+      <figure class="shot"><img src="img/nts_radiogram.webp" alt="A radiogram opened, showing its text, check warning and history"><figcaption>NR 57 opened, with its check warning and history.</figcaption></figure>
+
+      <h2 id="nt-relay"><span class="n">05</span>Relaying and delivering</h2>
+      <div class="prose"><ul>
+        <li>Click <b>Relay</b> or <b>Deliver</b> on a row.</li>
+        <li>Or tick several rows (or click <b>Select</b> on a book), then use <b>Relay selected…</b> or <b>Deliver selected…</b>.</li>
+        <li>Or click <b>Relay book…</b> to log every message in a book at once.</li>
+      </ul>
+      <p>A relay records the station you passed it to, the net, and the UTC date and time. A delivery records who it was delivered to, how (phone, email, in person, mail…), and the UTC time. <b>Undeliverable…</b> records the reason and the station you sent a service message to.</p></div>
+      <div class="two">
+        <figure class="shot"><img src="img/nts_relay_dialog.webp" alt="Relay dialog"><figcaption><b>Relay.</b> The net that's on now is filled in.</figcaption></figure>
+        <figure class="shot"><img src="img/nts_deliver_dialog.webp" alt="Deliver dialog"><figcaption><b>Deliver.</b> Choose the delivery method.</figcaption></figure>
+      </div>
+      <div class="callout tip">The Relay window comes filled in with the net that's on now and the last station you relayed to in the past three hours, so <kbd>Enter</kbd> is usually all it needs.</div>
+
+      <h3 id="nt-onair">One-click relays while you're on the air</h3>
+      <ol class="steps">
+        <li><b class="t">Check the Net</b>The <b>On the air</b> bar fills in whichever of your nets is on now. Type over it for a net that isn't in your list.</li>
+        <li><b class="t">Enter the receiving station</b>Type the callsign in <b>Sending to</b>. The bar lights up and every button changes to <b>Relay → W0QED</b>.</li>
+        <li><b class="t">Click to log</b>One click logs the relay to that station, on that net, at the current UTC time. The confirmation has an <b>Undo</b> button for about ten seconds.</li>
+        <li><b class="t">Change stations or stop</b>When another station takes traffic, type the new callsign. <b>Clear</b> turns one-click relaying off.</li>
+      </ol>
+      <div class="two">
+        <figure class="shot"><img src="img/nts_onair.webp" alt="On the air bar active with W0QED"><figcaption>One-click relay to W0QED is on.</figcaption></figure>
+        <figure class="shot"><img src="img/nts_relayed_toast.webp" alt="Confirmation toast with Undo"><figcaption>"2 messages relayed to W0QED," with <b>Undo</b>.</figcaption></figure>
+      </div>
+      <div class="callout">After the Undo button disappears, open the message from the <a href="#nt-log">Log</a> and use <b>Return to waiting</b>.</div>
+
+      <h2 id="nt-books"><span class="n">06</span>Books</h2>
+      <div class="prose"><p>Messages in the same group with the same <b>check</b>, <b>place of origin</b>, <b>text</b> and <b>signature</b> are shown together as a <b>BOOK OF <i>n</i></b>. Their precedence, HX, station of origin, time and date may differ. Whatever is the same for all of them goes in the book's header, and whatever differs goes on each message's own NR line. <b>Copy as book</b> puts the book on the clipboard, ready to read or send:</p></div>
+<pre>BOOK OF 2 R 8 HARTFORD CT
+BT
+HAPPY THANKSGIVING FROM ALL OF
+US X 73
+BT
+NEW ENGLAND TRAFFIC NET
+NR 101 K1NXT NOV 10
+AL ADAMS
+AKRON OH 44301
+NR 57 KN1OBI NOV 12
+BETTY BAKER
+CANTON OH 44702
+AR</pre>
+      <div class="prose"><p>Here the two messages came from different stations on different dates, so each NR line carries its own station and date. When the whole preamble matches, the NR line is just the number.</p></div>
+      <figure class="shot"><img src="img/nts_waiting.webp" alt="A book of 2 in the Relay — OH group"><figcaption>A <b>BOOK OF 2</b> under Relay — OH, with Copy as book, Select and Relay book.</figcaption></figure>
+
+      <h2 id="nt-originate"><span class="n">07</span>Originating a message</h2>
+      <div class="prose"><p>Use <b>Enter Traffic → Single radiogram</b> for one message, with fields for the preamble, address, text, signature and op note.</p>
+      <ul>
+        <li>The <b>check is counted as you type</b> the text, and <code>ARL</code> is added when ARL numbered texts are used. If you type over it with a value that doesn't match, a warning offers <b>Use</b> to put the counted value back.</li>
+        <li>Choose <b>I originated this message</b> and the number, station of origin, place, time filed and date are filled in for you.</li>
+        <li>Click <b>Save to Waiting</b>, or <b>Save &amp; log relayed…</b> or <b>Save &amp; log delivered…</b> if you've already passed it on.</li>
+      </ul></div>
+      <figure class="shot"><img src="img/nts_single.webp" alt="Single radiogram form"><figcaption>The single radiogram form.</figcaption></figure>
+
+      <h2 id="nt-log"><span class="n">08</span>The Log</h2>
+      <div class="prose"><p>Every message is listed with the newest activity first, showing where it came in from and where it went. Filter by status (relayed, delivered, undeliverable, waiting) or by date range, or search for a callsign, name, city, net or a word in the text. Click a message to view, copy, edit or delete it, or to <b>Return to waiting</b> if it was logged by mistake. <b>Export CSV</b> saves the filtered list.</p></div>
+      <figure class="shot"><img src="img/nts_log.webp" alt="Message log"><figcaption>The Log showing everything, including two relays and a delivery.</figcaption></figure>
+
+      <h2 id="nt-reports"><span class="n">09</span>Reports</h2>
+      <div class="prose"><p>Choose a period: today, yesterday, this week, this month, last month, this year, all time, or custom dates. The report shows:</p>
+      <ul>
+        <li><b>Received</b>, <b>Relayed (sent)</b>, <b>Delivered</b>, <b>Originated</b> and <b>Total handled</b>, counted the same way as the ARRL Station Activity Report, plus <b>Undeliverable</b>;</li>
+        <li>how close you are to the BPL (500 total, or 100 originated + delivered);</li>
+        <li>received and relayed counts by net and by station, deliveries by method, traffic by precedence, and a by-day table.</li>
+      </ul>
+      <p><b>Copy summary</b> puts a short text report on the clipboard for posting. <b>Export CSV</b> saves every event in the period.</p></div>
+      <figure class="shot"><img src="img/nts_reports.webp" alt="Traffic report for today"><figcaption>Today's report: 6 received, 2 relayed, 1 delivered, 9 handled.</figcaption></figure>
+
+      <h2 id="nt-backup"><span class="n">10</span>Backups and updates</h2>
+      <div class="prose"><ul>
+        <li><b>Settings → Backup &amp; Restore</b>: <b>Save backup…</b> writes everything to a <code>.json</code> file, and <b>Restore from backup…</b> loads one back. Make a backup now and then, and before moving to a new computer.</li>
+        <li><b>Automatic Snapshots</b>: a copy from before each day's changes, for the last 7 days that changed. A restore can be undone with <b>Before the last restore</b>. If the traffic file is ever damaged, the newest snapshot is restored at startup.</li>
+        <li><b>Open Data Folder</b> shows where your traffic is kept. It stays put when the app is updated or reinstalled.</li>
+        <li><b>Updates</b>: the app checks at startup. <b>Install Update</b> downloads the new version, verifies its signature, installs it and restarts the app. <b>What's New</b> shows the changes, and <b>Later</b> waits until the next start. <b>Check for Updates</b> is at the top right of Settings.</li>
+      </ul></div>
+      <figure class="shot"><img src="img/nts_settings_backup.webp" alt="Preferences and Backup and Restore"><figcaption>Preferences, and Backup &amp; Restore.</figcaption></figure>
+      <figure class="shot"><img src="img/nts_light.webp" alt="Dashboard in the light theme"><figcaption>The Dashboard in the light theme.</figcaption></figure>
+    </article>
+  </div>
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Software by Scott, <span class="mono">N8VCL</span>. Free for the amateur radio community.</span>
+    <span><a href="https://github.com/scottws70/Net-Roster-Logger">Net Roster Logger on GitHub</a> · <a href="https://github.com/scottws70/NTSLogger">NTS Traffic Logger on GitHub</a></span>
+  </div>
+</footer>
+
+<div id="lb" role="dialog" aria-modal="true" aria-label="Enlarged screenshot"><img alt=""></div>
+
+<script>
+(function(){
+  const pages=['home','net-roster-logger','nts-traffic-logger','docs','docs-roster','docs-nts'];
+  function route(){
+    let h=(location.hash||'#home').slice(1);
+    let page=h, target=null;
+    if(h.startsWith('rl-')){page='docs-roster';target=h;}
+    else if(h.startsWith('nt-')){page='docs-nts';target=h;}
+    if(!pages.includes(page)) page='home';
+    document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='p-'+page));
+    const navKey = page.startsWith('docs')?'docs':page;
+    document.querySelectorAll('[data-nav]').forEach(a=>{ if(a.dataset.nav===navKey) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
+    const titles={'home':'N8VCL Ham Radio Software','net-roster-logger':'Net Roster Logger · N8VCL','nts-traffic-logger':'NTS Traffic Logger · N8VCL','docs':'Docs · N8VCL','docs-roster':'Net Roster Logger Manual · N8VCL','docs-nts':'NTS Traffic Logger Manual · N8VCL'};
+    document.title=titles[page];
+    if(target){ const el=document.getElementById(target); if(el){
+      const go=()=>el.scrollIntoView({block:'start'});
+      requestAnimationFrame(go);
+      const imgs=[...document.querySelectorAll('#p-'+page+' img')].filter(i=>!i.complete);
+      if(imgs.length) Promise.all(imgs.map(i=>new Promise(r=>{i.addEventListener('load',r,{once:true});i.addEventListener('error',r,{once:true});}))).then(()=>{ if(location.hash==='#'+target) go(); });
+      return; } }
+    window.scrollTo(0,0);
+  }
+  window.addEventListener('hashchange',route); route();
+
+  // clocks
+  const L=document.getElementById('clkL'), Z=document.getElementById('clkZ');
+  const p2=n=>String(n).padStart(2,'0');
+  function tick(){const d=new Date();L.textContent=p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds());Z.textContent=p2(d.getUTCHours())+':'+p2(d.getUTCMinutes())+':'+p2(d.getUTCSeconds())+'Z';}
+  tick(); setInterval(tick,1000);
+
+  // lightbox
+  const lb=document.getElementById('lb'), lbi=lb.querySelector('img');
+  document.addEventListener('click',e=>{
+    const img=e.target.closest('.shot img'); if(img){lbi.src=img.src;lbi.alt=img.alt;lb.classList.add('show');return;}
+    if(e.target.closest('#lb')) lb.classList.remove('show');
+  });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') lb.classList.remove('show'); });
+
+  // waterfall
+  const c=document.getElementById('waterfall'); if(!c) return;
+  const ctx=c.getContext('2d'); let W,H,img;
+  const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const sig=[{f:.58,w:.006,a:.9},{f:.66,w:.012,a:.7},{f:.74,w:.004,a:1},{f:.83,w:.018,a:.55},{f:.9,w:.007,a:.8}];
+  function color(v){ // 0..1 -> dark blue -> cyan -> amber
+    v=Math.max(0,Math.min(1,v));
+    if(v<.5){const t=v/.5;return [8+t*30,14+t*150,28+t*200];}
+    const t=(v-.5)/.5;return [38+t*205,164+t*14,228-t*168];
+  }
+  function row(y,phase){
+    const line=ctx.createImageData(W,1);
+    for(let x=0;x<W;x++){
+      const fx=x/W; let v=Math.random()*.18;
+      for(const s of sig){ const on=Math.sin(phase*s.f*9+s.f*40)>-.3; if(on){ const d=(fx-s.f)/s.w; v+=s.a*Math.exp(-d*d);} }
+      const [r,g,b]=color(v); const i=x*4; line.data[i]=r;line.data[i+1]=g;line.data[i+2]=b;line.data[i+3]=255;
+    }
+    ctx.putImageData(line,0,y);
+  }
+  function size(){ const r=c.getBoundingClientRect(); W=c.width=Math.max(300,Math.floor(r.width/2)); H=c.height=Math.max(150,Math.floor(r.height/2)); for(let y=0;y<H;y++) row(y,y*.07); }
+  size(); window.addEventListener('resize',size);
+  if(!reduce){ let ph=0; setInterval(()=>{ if(!document.getElementById('p-home').classList.contains('active')) return; ctx.drawImage(c,0,0,W,H-1,0,1,W,H-1); ph-=.07; row(0,ph); },70); }
+})();
+</script>
+</body>
+</html>
